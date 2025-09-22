@@ -1,3 +1,12 @@
+import sys
+from pathlib import Path
+
+# Adiciona o diretório raiz do projeto ao Python path
+root_dir = Path(__file__).parent.parent.parent
+sys.path.insert(0, str(root_dir))
+
+
+
 from fastapi import FastAPI
 from core.config import settings
 from apps.api.routes import checkin, vagas, robos, operacao
@@ -19,9 +28,9 @@ def create_app() -> FastAPI:
     # registrando rotas
 
     app.include_router(checkin.router, prefix="/api", tags=["check-in"])
-    app.include_router(vagas.router, prefix="/api", tags=["vagas"])
-    app.include_router(robos.router, prefix="/api", tags=["robos"])
-    app.include_router(operacao.router, prefix="/api", tags=["operacoes"])
+    # app.include_router(vagas.router, prefix="/api", tags=["vagas"])
+    # app.include_router(robos.router, prefix="/api", tags=["robos"])
+    # app.include_router(operacao.router, prefix="/api", tags=["operacoes"])
 
     @app.on_event("startup")
     async def startup_event():
