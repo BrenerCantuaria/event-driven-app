@@ -95,3 +95,50 @@ class SpotQueryResponse(BaseModel):
         }
 
 
+# -------------------------------
+# 3. Seleção automática de vaga (GET /api/selecionar-vaga)
+# -------------------------------
+class SpotSelectionRequest(BaseModel):
+    """
+    Estrutura usada na seleção automática de uma vaga
+    """
+
+    checkInId: UUID = Field(..., description="ID único do check-in")
+    vehicleCategory: str = Field(..., description="Categoria do veículo")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "checkInId": "b12d2c77-51db-4eaf-89dc-482c9f88f650",
+                "vehicleCategory": "Carro",
+            }
+        }
+
+
+class SpotSelectionResponse(BaseModel):
+    """
+    Resposta após a seleção automática da vaga
+    """
+
+    success: bool = Field(
+        ..., description="Indica se a vaga foi selecionada com sucesso"
+    )
+    message: str = Field(..., description=" Mensagem de feedback para o usuário")
+    assignedSpot: Optional[Spot] = Field(
+        None, description="Informações da vaga atribuída, se houver"
+    )
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "success": True,
+                "message": "Vaga reservada com sucesso",
+                "assignedSpot": {
+                    "spotId": "S-12",
+                    "level": "2",
+                    "position": "A3",
+                    "isAvailable": False,
+                    "reservedUntil": "2025-09-27T17:30:00Z",
+                },
+            }
+        }
