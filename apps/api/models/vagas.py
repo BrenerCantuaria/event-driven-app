@@ -25,3 +25,13 @@ class Spot(BaseModel):
         description="Data/hora limite para uso da vaga qunado esiver reservada (ISO 8610)",
     )
 
+    class Config: 
+        json_schema_extra = {
+            "example" : {
+                "spotId": "S-12",
+                "level": "2",
+                "position": "A3",
+                "isAvailable": True,
+                "reservedUntil": None
+            }
+        }
