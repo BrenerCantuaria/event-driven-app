@@ -7,6 +7,7 @@ from uuid import UUID
 # 1. Representação de uma vaga individual
 # -------------------------------
 
+
 class Spot(BaseModel):
     """
     Representa uma vaga de estacionamento disponível ou reservada
@@ -25,35 +26,72 @@ class Spot(BaseModel):
         description="Data/hora limite para uso da vaga qunado esiver reservada (ISO 8610)",
     )
 
-    class Config: 
+    class Config:
         json_schema_extra = {
-            "example" : {
+            "example": {
                 "spotId": "S-12",
                 "level": "2",
                 "position": "A3",
                 "isAvailable": True,
-                "reservedUntil": None
+                "reservedUntil": None,
             }
         }
-        
+
+
 # -------------------------------
 # 2. Consulta de vagas disponíveis (GET /api/consultar-vagas)
 # -------------------------------
+
 
 class SpotQueryRequest(BaseModel):
     """
     Estrutura opcinal para a consulta de vagas
     Permite filtrar por categoria ou outros critérios
     """
-    checkInId: UUID = Field(...,description="Id único do check-in")
+
+    checkInId: UUID = Field(..., description="Id único do check-in")
     vehicleCategory: constr(strip_whitespace=True, min_length=3) = Field(
         ..., description="Categoria do veículo (sedan, hatch, caminhonete, SUV, picape)"
     )
-    
+
     class Config:
         json_schema_extra = {
             "example": {
-                    "checkInId": "b12d2c77-51db-4eaf-89dc-482c9f88f650",
-                    "vehicleCategory": "carro"
-                }
+                "checkInId": "b12d2c77-51db-4eaf-89dc-482c9f88f650",
+                "vehicleCategory": "carro",
             }
+        }
+
+
+class SpotQueryResponse(BaseModel):
+    """
+    Resposta para a consulta de vagas
+    """
+
+    totalAvailable: int = Field(..., description="Número total de vagas disponíveis")
+    spots: List[Spot] = Field(..., description="Lista de vagas encontradas")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "totalAvailable": 2,
+                "spots": {
+                    {
+                        "spotId": "S-12",
+                        "level": "2",
+                        "position": "A3",
+                        "isAvailable": True,
+                        "reservedUntil": None,
+                    },
+                    {
+                        "spotId": "S-15",
+                        "level": "2",
+                        "position": "B1",
+                        "isAvailable": True,
+                        "reservedUntil": None,
+                    },
+                },
+            }
+        }
+
+
