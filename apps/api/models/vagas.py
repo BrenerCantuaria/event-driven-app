@@ -35,3 +35,25 @@ class Spot(BaseModel):
                 "reservedUntil": None
             }
         }
+        
+# -------------------------------
+# 2. Consulta de vagas disponíveis (GET /api/consultar-vagas)
+# -------------------------------
+
+class SpotQueryRequest(BaseModel):
+    """
+    Estrutura opcinal para a consulta de vagas
+    Permite filtrar por categoria ou outros critérios
+    """
+    checkInId: UUID = Field(...,description="Id único do check-in")
+    vehicleCategory: constr(strip_whitespace=True, min_length=3) = Field(
+        ..., description="Categoria do veículo (sedan, hatch, caminhonete, SUV, picape)"
+    )
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                    "checkInId": "b12d2c77-51db-4eaf-89dc-482c9f88f650",
+                    "vehicleCategory": "carro"
+                }
+            }
