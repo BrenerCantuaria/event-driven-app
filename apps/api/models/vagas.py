@@ -75,7 +75,7 @@ class SpotQueryResponse(BaseModel):
         json_schema_extra = {
             "example": {
                 "totalAvailable": 2,
-                "spots": {
+                "spots": [
                     {
                         "spotId": "S-12",
                         "level": "2",
@@ -90,7 +90,7 @@ class SpotQueryResponse(BaseModel):
                         "isAvailable": True,
                         "reservedUntil": None,
                     },
-                },
+                ],
             }
         }
 
