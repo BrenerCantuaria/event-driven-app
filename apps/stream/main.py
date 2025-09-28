@@ -1,8 +1,10 @@
 from faststream import FastStream
 from apps.stream.utils.connection import broker
 
+
 # Importa os consumers para que eles sejam registrados automaticamente
-from apps.stream.consumers import checkin_consumer
+from apps.stream.consumers import orchestrator
+from apps.stream.consumers import spot_consumer
 
 app = FastStream(broker)
 
