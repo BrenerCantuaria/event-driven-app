@@ -41,7 +41,7 @@ async def on_spot_consult_completed(msg: dict, logger: Logger):
 
 
     await set_status(cid, "spots_consulted", extra={"spots": msg.get("spots", [])})
-    sleep(30)
+    sleep(10)
 
     # 2) solicitar reserva de vaga
     await broker.publish(
@@ -62,7 +62,7 @@ async def on_spot_reserved(msg: dict, logger: Logger):
     """
     cid = msg["checkInId"]
     spot = msg.get("spot")
-    sleep(30)
+    sleep(10)
 
     if not spot:
         logger.warning(f"[Orchestrator] Nenhuma vaga reservada para ID={cid}.")
@@ -74,10 +74,9 @@ async def on_spot_reserved(msg: dict, logger: Logger):
 
     await broker.publish(
         {"checkInId": cid, "spot": spot},
-        topic=topic.ROBOT_ASSIGN_REQUESTED,
+        routing_key=topic.ROBOT_ASSIGN_REQUESTED,
     )
 
     logger.info(
-        # f"[ROBÔS] Evento publicado -> {topic.ROBOT_ASSIGN_REQUESTED} para ID={cid}"
-        f"[ROBÔS] Evento publicado -> Robo assino para ID={cid}"
+        f"[ROBÔS] Evento publicado -> {topic.ROBOT_ASSIGN_REQUESTED} para ID={cid}"
     )
