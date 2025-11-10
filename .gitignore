@@ -5,6 +5,7 @@ build/
 dist/
 wheels/
 *.egg-info
+apps/stream/logging/infra/logs/system.log
 .env
 # Virtual environments
 .venv
