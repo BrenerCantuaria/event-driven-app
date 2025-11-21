@@ -1,7 +1,8 @@
 # apps/stream/mqtt/mqtt_client.py
 import json
 import asyncio
-import threading
+from typing import Callable, Dict
+
 from paho.mqtt import client as paho
 from apps.stream.logging.logger import get_logger
 
@@ -10,12 +11,21 @@ logger = get_logger("MQTT_CLIENT")
 
 class MQTTManager:
     """
-    Gerencia a conexão com RabbitMQ via MQTT usando a biblioteca paho-mqtt.
-    Configurado para MQTT 3.1.1, padrão suportado pelo RabbitMQ.
+    Gerencia a conexão com RabbitMQ via MQTT usando paho-mqtt.
+    - Protocolo MQTT 3.1.1 (MQTTv311), compatível com RabbitMQ.
+    - Suporte a tópicos com wildcard (+ e #).
+    - Integração com asyncio via connect() assíncrono.
     """
 
-    def __init__(self, client_id: str, host: str = "localhost", port: int = 1883,
-                 username: str = "guest", password: str = "guest", keepalive: int = 60):
+    def __init__(
+        self,
+        client_id: str,
+        host: str = "localhost",
+        port: int = 1884,
+        username: str = "",
+        password: str = "",
+        keepalive: int = 60,
+    ) -> None:
         self.client_id = client_id
         self.host = host
         self.port = port
@@ -23,14 +33,18 @@ class MQTTManager:
         self.password = password
         self.keepalive = keepalive
 
-        # Armazena handlers para cada tópico
-        self._message_handlers = {}
+        # Handlers registrados: pattern -> coroutine(topic, message: dict)
+        self._message_handlers: Dict[str, Callable] = {}
 
-        # Captura o event loop principal
-        self._loop = asyncio.get_event_loop()
+        # Loop asyncio e evento de conexão serão definidos no connect()
+        self._loop: asyncio.AbstractEventLoop | None = None
+        self._connected_event: asyncio.Event | None = None
 
-        # Configuração do cliente paho
-        self.client = paho.Client(client_id=self.client_id, protocol=paho.MQTTv311)
+        # Cliente paho
+        self.client = paho.Client(
+            client_id=self.client_id,
+            protocol=paho.MQTTv311,
+        )
         self.client.username_pw_set(self.username, self.password)
 
         # Callbacks
@@ -38,73 +52,82 @@ class MQTTManager:
         self.client.on_disconnect = self._on_disconnect
         self.client.on_message = self._on_message
 
-        # Controle do loop
-        self._loop_thread = None
-        self._connected_event = asyncio.Event()
-
-    # -----------------------------------------------------------
+    # ------------------------------------------------------------------
     # Conexão
-    # -----------------------------------------------------------
-    async def connect(self):
+    # ------------------------------------------------------------------
+    async def connect(self) -> None:
         """
-        Conecta ao broker MQTT e inicia o loop em thread separada.
+        Conecta ao broker MQTT e inicia o loop de rede em background (loop_start).
+        Aguarda até que o on_connect sinalize sucesso.
         """
-        def run_loop():
-            try:
-                logger.info("[LOOP] Iniciando loop de rede MQTT em thread separada")
-                self.client.loop_forever()
-            except Exception as e:
-                logger.error(f"[LOOP ERROR] Erro no loop MQTT: {e}")
+        if self._loop is None:
+            self._loop = asyncio.get_running_loop()
+        if self._connected_event is None:
+            self._connected_event = asyncio.Event()
 
-        logger.info(f"[CONNECTING] Conectando ao broker MQTT {self.host}:{self.port} ...")
+        logger.info(
+            f"[CONNECTING] Conectando ao broker MQTT {self.host}:{self.port} "
+            f"(client_id={self.client_id})..."
+        )
 
-        # Conecta ao broker
-        self.client.connect(self.host, self.port, self.keepalive)
+        try:
+            # Chamada síncrona, mas bem rápida
+            self.client.connect(self.host, self.port, self.keepalive)
+        except Exception as e:
+            logger.error(f"[CONNECT ERROR] Erro ao conectar ao broker MQTT: {e}")
+            raise
 
-        # Inicia thread para rodar loop_forever
-        self._loop_thread = threading.Thread(target=run_loop, daemon=True)
-        self._loop_thread.start()
+        # Inicia loop interno do paho em thread própria
+        self.client.loop_start()
 
-        # Aguarda confirmação de conexão
+        # Espera até o _on_connect sinalizar
         await self._connected_event.wait()
 
-    async def disconnect(self):
+    async def disconnect(self) -> None:
         """
-        Desconecta do broker MQTT e encerra a thread.
+        Desconecta do broker MQTT e para o loop interno.
         """
-        logger.info("[DISCONNECTING] Encerrando conexão MQTT...")
-        self.client.disconnect()
-        if self._loop_thread and self._loop_thread.is_alive():
-            self._loop_thread.join(timeout=2)
-        logger.info("[DISCONNECTED] Cliente desconectado do broker MQTT.")
+        logger.info("[DISCONNECTING] Encerrando MQTT...")
+        try:
+            self.client.loop_stop()  # para o loop em background
+            self.client.disconnect()
+        except Exception as e:
+            logger.error(f"[DISCONNECT ERROR] Erro ao desconectar: {e}")
+        else:
+            logger.info("[DISCONNECTED] Cliente MQTT desconectado.")
 
-    # -----------------------------------------------------------
+    # ------------------------------------------------------------------
     # Callbacks de conexão
-    # -----------------------------------------------------------
+    # ------------------------------------------------------------------
     def _on_connect(self, client, userdata, flags, rc):
         if rc == 0:
-            logger.info(f"[CONNECTED] MQTT conectado com sucesso! (client_id={self.client_id})")
-            self._loop.call_soon_threadsafe(self._connected_event.set)
+            logger.info(
+                f"[CONNECTED] MQTT conectado com sucesso! (client_id={self.client_id})"
+            )
+            if self._loop and self._connected_event:
+                # Sinaliza o connect() assíncrono
+                self._loop.call_soon_threadsafe(self._connected_event.set)
         else:
             logger.error(f"[CONNECT FAILED] Código de retorno: {rc}")
 
     def _on_disconnect(self, client, userdata, rc):
-        logger.warning(f"[DISCONNECTED] MQTT desconectado! Código={rc}")
+        logger.warning(f"[DISCONNECTED] MQTT desconectado. Código={rc}")
 
-    # -----------------------------------------------------------
+    # ------------------------------------------------------------------
     # Inscrição
-    # -----------------------------------------------------------
-    def subscribe(self, topic: str, handler, qos: int = 1):
+    # ------------------------------------------------------------------
+    def subscribe(self, topic: str, handler: Callable, qos: int = 1) -> None:
         """
-        Assina um tópico e registra um handler para processar mensagens recebidas.
+        Assina um tópico (que pode conter +/#) e registra o handler assíncrono
+        que será chamado como: await handler(topic: str, message: dict).
         """
         self._message_handlers[topic] = handler
         self.client.subscribe(topic, qos)
         logger.info(f"[SUBSCRIBED] {topic} (QoS={qos})")
 
-    # -----------------------------------------------------------
+    # ------------------------------------------------------------------
     # Publicação
-    # -----------------------------------------------------------
+    # ------------------------------------------------------------------
     def publish(self, topic: str, message: dict, qos: int = 1, retain: bool = False):
         """
         Publica uma mensagem JSON em um tópico MQTT.
@@ -113,21 +136,72 @@ class MQTTManager:
         self.client.publish(topic, payload, qos=qos, retain=retain)
         logger.info(f"[PUBLISHED] topic={topic} message={payload}")
 
-    # -----------------------------------------------------------
-    # Callback de mensagens
-    # -----------------------------------------------------------
+    # ------------------------------------------------------------------
+    # Mensagens recebidas
+    # ------------------------------------------------------------------
     def _on_message(self, client, userdata, msg):
         topic = msg.topic
         payload = msg.payload.decode("utf-8")
 
         logger.debug(f"[RECEIVED] topic={topic} payload={payload}")
 
-        handler = self._message_handlers.get(topic)
-        if handler:
+        handler: Callable | None = None
+
+        # Faz match de tópico recebido com os patterns registrados
+        for pattern, h in self._message_handlers.items():
+            if self._topic_matches(pattern, topic):
+                handler = h
+                break
+
+        if handler and self._loop:
             try:
                 data = json.loads(payload)
-                asyncio.run_coroutine_threadsafe(handler(topic, data), self._loop)
             except json.JSONDecodeError:
-                logger.error(f"[INVALID JSON] Tópico: {topic} | Payload bruto: {payload}")
+                logger.error(
+                    f"[INVALID JSON] Tópico={topic} | Payload bruto: {payload}"
+                )
+                return
+
+            # Executa o handler no event loop asyncio (já existente)
+            asyncio.run_coroutine_threadsafe(handler(topic, data), self._loop)
         else:
-            logger.warning(f"[UNHANDLED] Mensagem sem handler | Tópico: {topic}")
+            logger.warning(f"[UNHANDLED] Mensagem sem handler | {topic}")
+
+
+    def _topic_matches(self, pattern: str, topic: str) -> bool:
+        """Implementação correta de match MQTT com wildcards"""
+        pattern_parts = pattern.split("/")
+        topic_parts = topic.split("/")
+
+        for i in range(max(len(pattern_parts), len(topic_parts))):
+            if i >= len(pattern_parts):
+                return False
+            if i >= len(topic_parts):
+                return pattern_parts[i] == "#"
+
+            if pattern_parts[i] == "#":
+                return True
+            if pattern_parts[i] == "+":
+                continue
+            if pattern_parts[i] != topic_parts[i]:
+                return False
+
+        return True
+
+    # ------------------------------------------------------------------
+    # Loop assíncrono "infinito" (apenas para manter o serviço vivo)
+    # ------------------------------------------------------------------
+    async def loop_forever(self):
+        """
+        Mantém o contexto async vivo enquanto o loop do Paho
+        roda em background (loop_start).
+
+        Útil em scripts como o ESP32Simulator, que fazem:
+            await mqtt.connect()
+            await mqtt.loop_forever()
+        """
+        try:
+            while True:
+                await asyncio.sleep(3600)
+        except asyncio.CancelledError:
+            logger.info("[LOOP] loop_forever cancelado")
