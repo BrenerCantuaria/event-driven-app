@@ -4,6 +4,7 @@
 PYTHONPATH=.
 UVICORN= uvicorn apps.api.main:app --reload
 WORKER=python -m faststream run apps.stream.main:app 
+ESP32_SIMULATOR = python -m apps.stream.simulator.esp32_simulador
 RABBIT_IMAGE=rabbitmq:3-management
 
 # ==============================
@@ -17,6 +18,10 @@ api:
 # Inicia o Worker FastStream
 worker:
 	PYTHONPATH=$(PYTHONPATH) $(WORKER)
+
+# Inicia um simulador de ESP32
+simulador:
+	PYTHONPATH= $(ESP32_SIMULATOR)
 
 # Sobe RabbitMQ no Docker
 rabbit:
