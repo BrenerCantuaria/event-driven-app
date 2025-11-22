@@ -7,6 +7,7 @@ import uuid
 import paho.mqtt.client as paho
 from apps.stream.logging.logger import get_logger
 from apps.stream.mqtt.mqtt_client import MQTTManager
+from core.config import settings
 
 logger = get_logger("ESP32_SIMULATOR")
 
@@ -17,7 +18,12 @@ class ESP32Simulator:
     Pode ser executado em múltiplas instâncias, cada uma representando um robô único.
     """
 
-    def __init__(self, robot_id: str, mqtt_host="localhost", mqtt_port=1884):
+    def __init__(
+        self,
+        robot_id: str,
+        mqtt_host: str = str(settings.MQTT_HOST),
+        mqtt_port: int = int(settings.MQTT_PORT),
+    ):
         self.robot_id = robot_id
         self.mqtt = MQTTManager(
             client_id=f"sim_{robot_id}", host=mqtt_host, port=mqtt_port
@@ -127,30 +133,31 @@ class ESP32Simulator:
     async def start(self):
         """
         Inicia o simulador conectando ao broker e assinando os tópicos necessários.
-        
+
         IMPORTANTE: A ordem correta é:
         1. Conectar ao broker
         2. Aguardar conexão estabelecida
         3. Inscrever-se nos tópicos
         """
         logger.info(f"[STARTUP] Iniciando robô {self.robot_id}")
-        
+
         # Primeiro: Conecta ao broker
         await self.mqtt.connect()
         logger.info(f"[CONNECTED] Robô {self.robot_id} conectado ao MQTT")
-        
+
         # Aguarda um pouco para garantir que a conexão está estável
         await asyncio.sleep(0.5)
-        
+
         # Segundo: Registra os tópicos (DEPOIS de conectar!)
         logger.info(f"[SUBSCRIBING] Registrando tópicos para robô {self.robot_id}")
         self.mqtt.subscribe("jobs/call/+", self.on_job_call)
         self.mqtt.subscribe(f"jobs/assign/+/{self.robot_id}", self.on_assignment)
-        
+
         logger.info(f"[READY] Robô {self.robot_id} pronto para receber jobs!")
 
         # Mantém loop ativo aguardando mensagens
         await asyncio.Event().wait()
+
 
 # ----------------------------------------------------------------------
 # Execução direta para testes locais
@@ -159,7 +166,7 @@ class ESP32Simulator:
 if __name__ == "__main__":
     robot_id = f"R-{random.randint(1, 1000)}"  # Remove :02d para IDs únicos
     simulator = ESP32Simulator(robot_id)
-    
+
     logger.info(f"[INIT] Iniciando simulador para robô {robot_id}")
     try:
         asyncio.run(simulator.start())
