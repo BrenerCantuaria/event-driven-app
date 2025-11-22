@@ -37,11 +37,12 @@ async def ensure_mqtt_started():
         if _mqtt_started:
             return
 
+        await mqtt_manager.connect()
+        logger.info("[MQTT] Conexão estabelecida com sucesso.")
         # Assina callbacks de bid e ack
         mqtt_manager.subscribe("jobs/bid/+/+", robot_service.on_bid_received)
         mqtt_manager.subscribe("jobs/accept/+/+", robot_service.on_assignment_ack)
 
-        await mqtt_manager.connect()
         logger.info("[MQTT] Conexão inicializada e tópicos assinados.")
 
         # Loop MQTT em paralelo
