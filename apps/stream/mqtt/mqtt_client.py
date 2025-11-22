@@ -1,11 +1,11 @@
 # apps/stream/mqtt/mqtt_client.py
 import json
 import asyncio
-from typing import Callable, Dict
+from typing import Callable, Dict, Optional
 
 from paho.mqtt import client as paho
 from apps.stream.logging.logger import get_logger
-
+from core.config import settings
 logger = get_logger("MQTT_CLIENT")
 
 
@@ -20,17 +20,32 @@ class MQTTManager:
     def __init__(
         self,
         client_id: str,
-        host: str = "localhost",
-        port: int = 1884,
-        username: str = "",
-        password: str = "",
+        host: Optional[str] = None,
+        port: Optional[int] = None,
+        username: Optional[str] = None,
+        password: Optional[str] = None,
         keepalive: int = 60,
     ) -> None:
+        """
+        Inicializa o cliente MQTT.
+        
+        Se os parâmetros não forem fornecidos, usa valores do .env.
+        
+        Args:
+            client_id: ID único do cliente MQTT
+            host: Hostname do broker (default: do .env)
+            port: Porta do broker (default: do .env)
+            username: Usuário MQTT (default: do .env)
+            password: Senha MQTT (default: do .env)
+            keepalive: Intervalo keepalive em segundos
+        """
         self.client_id = client_id
-        self.host = host
-        self.port = port
-        self.username = username
-        self.password = password
+        
+        # Usa valores do .env como fallback
+        self.host = host or settings.MQTT_HOST
+        self.port = port or int(settings.MQTT_PORT)
+        self.username = username or settings.MQTT_USERNAME
+        self.password = password or settings.MQTT_PASSWORD
         self.keepalive = keepalive
 
         # Handlers registrados: pattern -> coroutine(topic, message: dict)
@@ -45,13 +60,27 @@ class MQTTManager:
             client_id=self.client_id,
             protocol=paho.MQTTv311,
         )
-        self.client.username_pw_set(self.username, self.password)
+        
+        # Configura credenciais apenas se fornecidas
+        if self.username and self.password:
+            self.client.username_pw_set(self.username, self.password)
+            logger.debug(f"[INIT] Autenticação configurada para usuário: {self.username}")
+        else:
+            logger.debug("[INIT] Modo anônimo (sem autenticação)")
 
         # Callbacks
         self.client.on_connect = self._on_connect
         self.client.on_disconnect = self._on_disconnect
         self.client.on_message = self._on_message
+        
+        # Log de inicialização (sem expor senha)
+        logger.info(
+            f"[INIT] Cliente MQTT inicializado | "
+            f"client_id={self.client_id} | "
+            f"broker={self.host}:{self.port}"
+        )
 
+    
     # ------------------------------------------------------------------
     # Conexão
     # ------------------------------------------------------------------
